@@ -1,4 +1,4 @@
-# Overlay: mount your own Gurobi license file read-only. Set GUROBI_LICENSE_FILE in .env.
+# Overlay: mount your own Gurobi license file read-only. Set GUROBI_LICENSE_FILE in deploy/.env.
 # The file must be readable by the container user (uid 10001). A license uploaded through
 # the Engine tab takes precedence over this one.
 services:

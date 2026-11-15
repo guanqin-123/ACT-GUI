@@ -20,8 +20,7 @@
     ]
   },
   "include": [
-    "visual_bench/**/*.ts",
-    "visual_bench/**/*.tsx",
-    "vite.config.ts"
+    "**/*.ts",
+    "**/*.tsx"
   ]
 }

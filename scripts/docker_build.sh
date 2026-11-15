@@ -36,4 +36,4 @@ for m in json.load(open("fixtures/catalog.json"))["models"]:
     print("staged model", m["act_path"])
 EOF
 
-docker compose build "$@"
+docker compose -f deploy/compose.yaml build "$@"

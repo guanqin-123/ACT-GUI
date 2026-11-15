@@ -1,4 +1,4 @@
-# Container runtime (Dockerfile). Versions match the act-py312 environment that produced
+# Container runtime (deploy/Dockerfile). Versions match the act-py312 environment that produced
 # fixtures/catalog.json, limited to what the workbench's ACT paths import. torch/torchvision
 # come from the CUDA 12.8 wheel index (also runs on CPU); gurobipy is installed separately
 # with a build-time version argument.

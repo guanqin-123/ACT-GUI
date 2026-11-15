@@ -4,10 +4,10 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "tsc --noEmit && vite build",
-    "typecheck": "tsc --noEmit",
-    "test": "vitest run",
+    "dev": "vite visual_bench",
+    "build": "tsc -p visual_bench --noEmit && vite build visual_bench",
+    "typecheck": "tsc -p visual_bench --noEmit",
+    "test": "vitest run --root visual_bench",
     "gen:types": "node scripts/gen_types.mjs",
     "check:types": "node scripts/gen_types.mjs --check"
   },

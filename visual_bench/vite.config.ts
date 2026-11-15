@@ -1,11 +1,12 @@
 import { defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";
+import { fileURLToPath } from "node:url";
 
 const servicePort = process.env.ACT_GUI_SERVICE_PORT ?? "18765";
 
 // Development: the browser dev server proxies /api (REST + SSE) to the FastAPI service on loopback.
 export default defineConfig({
-  root: "visual_bench",
+  root: fileURLToPath(new URL(".", import.meta.url)), // visual_bench/, whatever the working directory
   plugins: [react()],
   server: {
     host: "127.0.0.1",

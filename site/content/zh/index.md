@@ -33,6 +33,6 @@ features:
 
 <div class="home-demo">
 
-![在线工作台中的 ACT 模糊测试](../fuzzingGuide.gif)
+![在线工作台中的 ACT 模糊测试](../docs/assets/fuzzingGuide.gif)
 
 </div>

@@ -5,7 +5,7 @@ FROM node:22-bookworm-slim AS build
 WORKDIR /repo
 COPY site/package.json site/package-lock.json site/
 RUN cd site && npm ci --no-audit --no-fund
-COPY README.md AGENTS.md fuzzingGuide.gif ./
+COPY README.md AGENTS.md ./
 COPY docs docs
 COPY visual_bench visual_bench
 COPY engine_bridge engine_bridge

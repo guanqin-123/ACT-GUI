@@ -105,6 +105,7 @@ These are commands to run, not a claim that a new test run occurred. ACT-backed 
 | [schemas.py](schemas.py) | Re-exports module schemas and lists WIRE_MODELS for generation. |
 | [wire.py](wire.py), [errors.py](errors.py), [config.py](config.py) | Wire primitives, application errors, paths/settings. Input-sized vectors above `engine_bridge.contracts.DISPLAY_VALUES` (3x224x224 values) are omitted from browser responses; records and model files keep them for save and export. |
 | [app.tsx](app.tsx), [main.tsx](main.tsx) | Browser composition, shared selection, QueryClientProvider. |
+| [vite.config.ts](vite.config.ts), [tsconfig.json](tsconfig.json) | Browser dev server (proxies `/api` to the service), production build into `dist/web`, vitest and TypeScript settings; the root `package.json` scripts run them on this directory. |
 | [generated/wire.ts](generated/wire.ts) | Generated browser wire types. |
 | [conftest.py](conftest.py), [testing.py](testing.py) | Shared service test fixtures and helpers. |
 

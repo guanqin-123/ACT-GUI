@@ -9,8 +9,8 @@ const content = path.join(import.meta.dirname, "content");
 const SOURCES = [
   "README.md",
   "AGENTS.md",
-  "fuzzingGuide.gif",
   "docs/*.md",
+  "docs/assets/*",
   "visual_bench/**/*.md",
   "engine_bridge/**/*.md",
   "site/README.md",

@@ -1,12 +1,12 @@
 # syntax=docker/dockerfile:1
 # ACT-GUI workbench image: browser assets + FastAPI service + pinned ACT, one origin on port 8080.
 # Build with scripts/docker_build.sh, which stages the pinned ACT commit as the "act" build context.
+# The build context is the repository root (see compose.yaml); Dockerfile.dockerignore filters it.
 
 FROM node:22-bookworm-slim AS web
 WORKDIR /src
 COPY package.json package-lock.json ./
 RUN npm ci --no-audit --no-fund
-COPY tsconfig.json vite.config.ts ./
 COPY visual_bench ./visual_bench
 RUN npm run build
 

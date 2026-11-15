@@ -26,4 +26,4 @@ for _ in $(seq 60); do
 done
 
 echo "ACT-GUI: open http://127.0.0.1:$ACT_GUI_WEB_PORT in your browser"
-npx vite
+npx vite visual_bench

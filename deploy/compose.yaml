@@ -1,7 +1,9 @@
-# ACT-GUI workbench. Start:            docker compose up -d   -> http://127.0.0.1:8080
-# With NVIDIA GPUs:                     docker compose -f compose.yaml -f deploy/compose.gpu.yaml up -d
+# ACT-GUI workbench. Relative paths in this file resolve from deploy/; the build context is the repository root.
+# Start (from the repository root):     docker compose -f deploy/compose.yaml up -d   -> http://127.0.0.1:8080
+# With NVIDIA GPUs:                     add -f deploy/compose.gpu.yaml
 # With ACT's data/ and literature/:     add -f deploy/compose.actdata.yaml (model sources for the Load model panel)
 # With a mounted Gurobi license file:   add -f deploy/compose.gurobi.yaml (or upload it in the Engine tab)
+# Optional settings:                    copy deploy/.env.example to deploy/.env
 # Build from source first:              scripts/docker_build.sh
 name: act-gui
 
@@ -9,9 +11,10 @@ services:
   workbench:
     image: ${ACT_GUI_IMAGE:-act-gui:0.1.0}
     build:
-      context: .
+      context: ..  # the repository root
+      dockerfile: deploy/Dockerfile
       additional_contexts:
-        act: ./build/act
+        act: ../build/act
       args:
         GUROBIPY_VERSION: ${GUROBIPY_VERSION:-13.0.0}
     ports:

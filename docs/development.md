@@ -28,21 +28,21 @@ In the browser, load or select a model, choose Fuzzing, Verification, or BaB, an
 Requirements: Docker with Compose v2.24+; for GPU, an NVIDIA driver and the NVIDIA Container Toolkit. Nothing else is installed on the host.
 
 ```bash
-cp .env.example .env                      # optional settings (port, image tag, Gurobi, AI key)
-scripts/docker_build.sh                   # stage the pinned ACT commit into build/act, then docker compose build
-docker compose up -d                      # CPU; open http://127.0.0.1:8080
-docker compose -f compose.yaml -f deploy/compose.gpu.yaml up -d  # NVIDIA GPU (ACT_GUI_DEVICE=cuda)
+cp deploy/.env.example deploy/.env                                      # optional settings (port, image tag, Gurobi, AI key)
+scripts/docker_build.sh                                                 # stage the pinned ACT commit into build/act, then docker compose build
+docker compose -f deploy/compose.yaml up -d                             # CPU; open http://127.0.0.1:8080
+docker compose -f deploy/compose.yaml -f deploy/compose.gpu.yaml up -d  # NVIDIA GPU (ACT_GUI_DEVICE=cuda)
 ```
 
 The image serves the built browser app, the API, and SSE from one origin on `127.0.0.1:${ACT_GUI_PORT:-8080}`; records, loaded models, staged engines and uploaded licenses persist in the `act-gui-data` volume (`/data`). `scripts/docker_build.sh` reads the ACT commit from `fixtures/catalog.json` and fetches it from `$ACT_SOURCE` (a local checkout by default, or a git URL). The catalog models are generated, git-ignored ACT files, so the script also copies them from `$ACT_NETS_FROM` (default `$ACT_ROOT`) and fails unless each matches its pinned sha256.
 
 **ACT data.** The **Load model** panel builds models from ACT's git-ignored `data/` (VNN-LIB benchmarks, MNIST/CIFAR-10 test sets) and `literature/` (ONNX classifiers) directories, which the image does not contain. Mount them read-only with `-f deploy/compose.actdata.yaml` (`ACT_DATA_FROM` defaults to `$ACT_ROOT`); without them the panel lists no sources and the catalog still works.
 
-**Gurobi.** Gurobi is optional; the image contains gurobipy (`GUROBIPY_VERSION`) but never a license. Either upload your `gurobi.lic` in the **Engine** tab, or mount it with `GUROBI_LICENSE_FILE=/path/to/gurobi.lic` in `.env` and `-f deploy/compose.gurobi.yaml`. The Engine tab shows Gurobi's own license check. WLS and token-server licenses work in containers; host-bound (named-user/academic) licenses usually do not. The current interval and BaB methods do not call Gurobi.
+**Gurobi.** Gurobi is optional; the image contains gurobipy (`GUROBIPY_VERSION`) but never a license. Either upload your `gurobi.lic` in the **Engine** tab, or mount it with `GUROBI_LICENSE_FILE=/path/to/gurobi.lic` in `deploy/.env` and `-f deploy/compose.gurobi.yaml`. The Engine tab shows Gurobi's own license check. WLS and token-server licenses work in containers; host-bound (named-user/academic) licenses usually do not. The current interval and BaB methods do not call Gurobi.
 
 ## Settings
 
-Every setting is optional. Compose passes `.env` into the container; `dev.sh` and the service read the environment.
+Every setting is optional. Compose passes `deploy/.env` into the container; `dev.sh` and the service read the environment.
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
@@ -66,11 +66,11 @@ Entering a repository URL runs that repository's code on the server, so a public
 
 | Path | Configures |
 | --- | --- |
-| `compose.yaml`, `Dockerfile`, `.dockerignore`, `.env.example` | The workbench image and service; copy `.env.example` to `.env` next to `compose.yaml` |
-| `deploy/compose.*.yaml` | Optional overlays, each added with `-f` after `compose.yaml`: `gpu` (NVIDIA GPUs), `actdata` (ACT's `data/` and `literature/`), `gurobi` (a mounted license file) |
+| `deploy/compose.yaml`, `deploy/Dockerfile`, `deploy/Dockerfile.dockerignore`, `deploy/.env.example` | The workbench image and service; copy `.env.example` to `.env` in `deploy/` |
+| `deploy/compose.*.yaml` | Optional overlays, each added with `-f` after `deploy/compose.yaml`: `gpu` (NVIDIA GPUs), `actdata` (ACT's `data/` and `literature/`), `gurobi` (a mounted license file) |
 | `requirements/dev.txt`, `requirements/runtime.txt` | Python pins for `.venv` and for the image |
 | `pyproject.toml` | pytest and pyright settings |
-| `package.json`, `tsconfig.json`, `vite.config.ts` | Browser dependencies, type check, dev server, build and tests |
+| `package.json`, `visual_bench/tsconfig.json`, `visual_bench/vite.config.ts` | Browser dependencies, type check, dev server, build and tests |
 | `site/compose.yaml` | The website container ([site](../site/README.md)) |
 
 ## Checks

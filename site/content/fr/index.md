@@ -33,6 +33,6 @@ features:
 
 <div class="home-demo">
 
-![Fuzzing ACT dans l'atelier en ligne](../fuzzingGuide.gif)
+![Fuzzing ACT dans l'atelier en ligne](../docs/assets/fuzzingGuide.gif)
 
 </div>

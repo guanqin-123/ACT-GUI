@@ -1,8 +1,9 @@
+# Patterns are relative to the build context, the repository root (deploy/Dockerfile).
 .git
 .venv
 .omo
 .pytest_cache
-.env
+**/.env
 build
 dist
 var
@@ -10,5 +11,3 @@ node_modules
 **/node_modules
 **/__pycache__
 **/*.pyc
-site/.vitepress/dist
-site/.vitepress/cache
