@@ -3,7 +3,7 @@ import { fmt, num, tooLarge, type WireNumber } from "../shared/wire";
 import type { InputSpecOut, ModelDescriptionOut, OutputSpecOut } from "../generated/wire";
 import { classLabel, specImageShape } from "../shared/ui/pixels";
 import { BandChart, BAND_MAX_DIMS } from "../shared/ui/BandChart";
-import { useProvenance } from "./hooks";
+import { rowCount, useBatchRows, useProvenance } from "./hooks";
 import { InputDomain } from "./InputDomain";
 import { TextProvenance } from "./TextProvenance";
 
@@ -58,12 +58,16 @@ export type ShownSpec = InputSpecOut & { lb: WireNumber[]; ub: WireNumber[] };
 function InputSpecView({ s, modelId }: { s: InputSpecOut; modelId: string }) {
   const provenance = useProvenance(modelId);
   const known = provenance.status === "success" && provenance.data.status === "available" ? provenance.data.rows : null;
-  const rows = s.shape.length === 4 && s.shape[0]! > 1 ? s.shape[0]!
+  const batch = useBatchRows(modelId);
+  // ACT keeps one INPUT row per lane on the leading axis: a test image, a property, or a query of a property.
+  const rows = s.shape.length >= 2 && s.shape[0]! > 1 ? s.shape[0]!
     : known && known.length > 1 && s.lb !== null && s.lb.length % known.length === 0 ? known.length : 1;
   const [row, setRow] = useState(0);
   const title = <>Input domain · {s.kind} (layer {s.layer_id}){s.dataset ? ` · ${s.dataset}` : ""}</>;
   if (s.lb === null || s.ub === null) {
-    return <div className="spec"><div className="label">{title}</div><div className="note">{tooLarge(s.shape.slice(1).reduce((a, b) => a * b, 1))}</div></div>;
+    const perRow = s.shape.slice(1).reduce((a, b) => a * b, 1);
+    return <div className="spec"><div className="label">{title}{rows > 1 ? ` · ${rowCount(rows, batch?.noun ?? "row")}` : ""}</div>
+      <div className="note">{tooLarge(rows > 1 ? rows * perRow : perRow)}{rows > 1 ? ` (${rows} rows of ${perRow} values)` : ""}</div></div>;
   }
   const r = Math.min(row, rows - 1);
   const per = s.lb.length / rows;
@@ -76,9 +80,10 @@ function InputSpecView({ s, modelId }: { s: InputSpecOut; modelId: string }) {
   return (
     <div className="spec">
       <div className="label">{title}
-        {rows > 1 && <> · batch of {rows} rows{" "}
+        {rows > 1 && <> · {rowCount(rows, batch?.labels.length === rows ? batch.noun : "row")}{" "}
           <select value={r} onChange={(e) => setRow(Number(e.target.value))} aria-label="batch row">
-            {Array.from({ length: rows }, (_, k) => <option key={k} value={k}>row {k}</option>)}
+            {Array.from({ length: rows }, (_, k) => <option key={k} value={k}>
+              {batch?.labels.length === rows ? batch.labels[k] : `row ${k}`}</option>)}
           </select></>}
       </div>
       {shape ? (
@@ -89,7 +94,8 @@ function InputSpecView({ s, modelId }: { s: InputSpecOut; modelId: string }) {
       ) : spec.lb.length <= BAND_MAX_DIMS ? (
         <>
           {p && <TextProvenance p={p} />}
-          <BandChart lb={spec.lb.map(num)} ub={spec.ub.map(num)} label={rows > 1 ? `input box of row ${r}` : "input box"}
+          <BandChart lb={spec.lb.map(num)} ub={spec.ub.map(num)}
+            label={rows > 1 ? `input box of ${batch?.labels.length === rows ? batch.labels[r] : `row ${r}`}` : "input box"}
             markers={anchor ? [{ label: "source sentence", cls: "anchor", values: anchor }] : []} />
           <details><summary className="note">numeric bounds</summary><BoundsTable s={spec} /></details>
         </>

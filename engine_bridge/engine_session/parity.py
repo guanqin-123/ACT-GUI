@@ -66,6 +66,12 @@ def requirements() -> dict[str, tuple[Requirement, ...]]:
         "spec.read": (Requirement(f"{_VERIFIER}:get_input_ids", positional=1),
                       Requirement(f"{_VERIFIER}:get_output_ids", positional=1)),
         "verify.interval": _VERIFY_ONCE,
+        # verify_once's concrete check at each lane's box center (a point lane is decided by it).
+        "verify.center_check": (
+            *_VERIFY_ONCE,
+            Requirement(f"{_VERIFIER}:verify_once", ("model_fn",), positional=1),
+            Requirement("act.util.counterexample:concrete_forward", positional=2),
+        ),
         "verify.dual": _VERIFY_ONCE,
         "verify.dual.options": (
             *_VERIFY_ONCE,
@@ -147,6 +153,13 @@ def requirements() -> dict[str, tuple[Requirement, ...]]:
         # create_specs_from_paths takes one ONNX file per network of a multi-network property.
         "source.vnnlib.multi_network": (
             Requirement("act.front_end.vnnlib_loader.data_model_loader:build_multi_network_model", positional=2),
+            Requirement("act.front_end.vnnlib_loader.create_specs:create_specs_from_paths", ("category",), positional=2),
+            *_WRAP,
+        ),
+        # create_specs_from_paths enumerates inputs a network reads only through Cast to an integer type
+        # (cctsdb_yolo_2023's patch position): each case is one INPUT row of the remaining static network.
+        "source.vnnlib.integer_inputs": (
+            Requirement("act.front_end.vnnlib_loader.onnx_converter:convert_onnx_instance", ("simplify",), positional=1),
             Requirement("act.front_end.vnnlib_loader.create_specs:create_specs_from_paths", ("category",), positional=2),
             *_WRAP,
         ),

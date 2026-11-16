@@ -18,7 +18,7 @@ from visual_bench.fuzzing.live import FuzzLive
 from visual_bench.model_spec.service import ModelService
 from visual_bench.records import RecordStore
 from visual_bench.records.store import now_iso
-from visual_bench.verification.service import SAVED, RunService, vnncomp_sat
+from visual_bench.verification.service import SAVED, RunService, declared_row, vnncomp_sat
 from visual_bench.wire import display_numbers, wire_number, wire_numbers
 
 
@@ -147,6 +147,9 @@ class FuzzingService:
         if entry is None:
             raise AppError(404, "counterexample_not_saved", f"Counterexample #{index} is not saved on {run_id}")
         x, y = entry["counterexample"]["input"], entry["counterexample"]["output"]
+        declared = declared_row(self.models.entry(run.model_id).get("params", {}), x)
+        if declared is not None:
+            return vnncomp_sat(declared, y, [1, len(declared)])
         specs = self.models.describe(run.model_id).input_specs
         shape = specs[0].shape if specs and math.prod(specs[0].shape) == len(x) else [1, len(x)]
         return vnncomp_sat(x, y, shape)

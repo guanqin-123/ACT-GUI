@@ -27,7 +27,11 @@ def test_run_verdict_matches_recorded_native_act(model_id, method):
     assert out.device == ("cuda:0" if torch.cuda.is_available() else "cpu")
 
 def native_domain_status(model_id: str, domain: str) -> str:
-    """Direct ACT call with the solver/TF selection of act/config/pipeline_cli.py."""
+    """Direct ACT call with the solver/TF selection of act/config/pipeline_cli.py, plus the concrete center
+    check the bridge adds where ACT offers it (capability verify.center_check)."""
+    from engine_bridge.engine_session import capability_available
+
+    center_check = domain != "dual" and capability_available("verify.center_check")
     with act_imports():
         from act.back_end.transfer_functions import set_solver_mode, set_transfer_function_mode
         from act.back_end.verifier import verify_once
@@ -37,7 +41,12 @@ def native_domain_status(model_id: str, domain: str) -> str:
         set_transfer_function_mode("hybridz" if domain == "hybridz" else "interval",
                                    BackendConfig.from_yaml().hybridz if domain == "hybridz" else None)
         kw: dict[str, Any] = {"timelimit": 30.0, "hybridz_tolerance": 1e-7} if domain == "hybridz" else {}
-        status = verify_once(native_net(model_id), **kw)[0].status.name
+        net = native_net(model_id)
+        if center_check:
+            from act.util.counterexample import concrete_forward
+
+            kw["model_fn"] = lambda x: concrete_forward(net, x)
+        status = verify_once(net, **kw)[0].status.name
         set_solver_mode(None)
         set_transfer_function_mode("interval")
         return status
@@ -127,6 +136,59 @@ def test_fuzzing_never_falsifies_a_property_act_certifies():
     assert sum(s.selected for s in out.strategies) == out.iterations  # batch size 1: one strategy per sample
     iters = [p.iteration for p in out.timeline]
     assert iters == sorted(iters) and iters[-1] == 200
+
+def test_property_verdict_covers_every_query(tmp_path):
+    from engine_bridge.contracts import VnnlibInstance
+    from engine_bridge.engine_session import capability_available
+
+    require_sources()
+    inst = VnnlibInstance("adaptive_cruise_control_non_linear_2026",
+                          "onnx/acc-2000000-64-64-64-64-retrain-100000-200000-0.9.onnx", "vnnlib/instance_1.vnnlib")
+    if not (sources.vnnlib_root() / inst.benchmark / inst.vnnlib).is_file():
+        pytest.skip("ACT checkout has no adaptive_cruise_control_non_linear_2026 benchmark")
+    if not capability_available("source.vnnlib.multi_network"):
+        pytest.skip("the active ACT predates VNN-COMP 2026 benchmark support (nonlinear properties)")
+    try:
+        built = sources.build_vnnlib_net(inst, tmp_path / "acc.json")
+    except BridgeError as err:
+        assert err.code == "unsupported_spec"  # an ACT that cannot stack 2/4/5/7-row queries in one model
+        pytest.skip(err.message)
+    out = run_verification(tmp_path / "acc.json", "interval", 60.0)
+    # VNN-COMP 2026 result: unsat. Every one of the 38 queries must be certified for that verdict.
+    assert built.input_rows == len(out.rows) == 38
+    assert out.verdict == "certified" and all(r.verdict == "certified" for r in out.rows)
+
+@pytest.mark.parametrize("vnnlib,verdict", [("spec_onnx_patch-1_idx_00559_0", "certified"),
+                                            ("spec_onnx_patch-3_idx_05840_0", "falsified")])
+def test_integer_cast_patch_positions_decide_cctsdb(tmp_path, vnnlib, verdict):
+    from engine_bridge.contracts import VnnlibInstance
+    from engine_bridge.engine_session import capability_available
+
+    require_sources()
+    onnx = f"onnx/{vnnlib.split('_')[2]}.onnx"
+    inst = VnnlibInstance("cctsdb_yolo_2023", onnx, f"vnnlib/{vnnlib}.vnnlib")
+    bench = sources.vnnlib_root() / inst.benchmark
+    if not (bench / inst.vnnlib).is_file():
+        pytest.skip("ACT checkout has no cctsdb_yolo_2023 benchmark")
+    if not (capability_available("source.vnnlib.integer_inputs") and capability_available("verify.center_check")):
+        pytest.skip("the active ACT cannot enumerate integer-cast inputs or check box centers")
+    built = sources.build_vnnlib_net(inst, tmp_path / "c.json")
+    out = run_verification(tmp_path / "c.json", "interval", 120.0)
+    # The patch position X[12288], X[12289] in [0, 62]^2 gives 190 distinct patch masks; VNN-COMP 2026 results:
+    # patch-1 idx_00559_0 unsat, patch-3 idx_05840_0 sat.
+    assert (built.input_rows, len(out.rows), built.params["declared_inputs"]) == (190, 190, 12296)
+    assert out.verdict == verdict
+    if verdict == "certified":
+        return
+    import numpy as np
+    import onnxruntime as ort
+
+    row = next(r for r in out.rows if r.verdict == "falsified")
+    assert row.counterexample is not None
+    x = np.asarray(row.counterexample[:12296], dtype=np.float32)
+    session = ort.InferenceSession(str(bench / onnx), providers=["CPUExecutionProvider"])
+    y = session.run(None, {session.get_inputs()[0].name: x})[0]
+    assert float(y.reshape(-1)[0]) <= 0.5  # the original ONNX violates (assert (<= Y[0] 0.5)) at the declared prefix
 
 def test_invalid_inputs_raise_structured_errors(tmp_path):
     with pytest.raises(BridgeError) as e1:

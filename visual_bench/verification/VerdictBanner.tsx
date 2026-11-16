@@ -3,7 +3,7 @@
 import { fmt, indexRanges, num } from "../shared/wire";
 import { runDomainLabel } from "./labels";
 import type { InputSpecOut, ModelDescriptionOut, RowVerdictOut, RunOut, RunResultOut } from "../generated/wire";
-import { useBatchRows, useNearest, useRowProvenance } from "../model_spec/hooks";
+import { rowCount, useBatchRows, useNearest, useRowProvenance } from "../model_spec/hooks";
 import { BandChart } from "../shared/ui/BandChart";
 import { Neighbours } from "../shared/ui/Neighbours";
 import { useState } from "react";
@@ -70,8 +70,11 @@ export function VerdictBanner({ runId, model }: {
 
 function BatchNote({ n, modelId }: { n: number; modelId: string }) {
   const noun = useBatchRows(modelId)?.noun ?? "row";
-  const plural = noun === "property" ? "properties" : `${noun}s`;
-  return <>Batch of {n} {plural}: the verdict holds for the whole batch only when it holds for every {noun}. </>;
+  if (noun === "query") {
+    return <>{rowCount(n, "query")}: a property is violated when any of its queries is, so it is certified only when
+      every query is. </>;
+  }
+  return <>Batch of {rowCount(n, noun)}: the verdict holds for the whole batch only when it holds for every {noun}. </>;
 }
 
 // ACT's counterexample of one batch row (row null: a single-row net), with the output for its VNN-COMP export.
@@ -97,7 +100,11 @@ function RowVerdicts({ rows, modelId, selected, pickable, onPick }: {
   const groups = Object.keys(VERDICT).map((k) => ({ k, rs: rows.filter((x) => x.verdict === k).map((x) => x.row) }))
     .filter((g) => g.rs.length > 0);
   const title = (rs: number[]) => batch?.images
-    ? `test images ${indexRanges(rs.map((r) => batch.images![r]!))}` : rs.map(label).join(", ");
+    ? `test images ${indexRanges(rs.map((r) => batch.images![r]!))}`
+    : batch?.noun === "query" && rs.length > 12 ? `${rs.slice(0, 12).map(label).join(", ")}, … (${rs.length})`
+    : rs.map(label).join(", ");
+  // Undecided and falsified rows first: with hundreds of queries they are the ones to look at.
+  const order = [...rows].sort((a, b) => Number(a.verdict === "certified") - Number(b.verdict === "certified"));
   return (
     <details className="batchchips">
       <summary>
@@ -105,7 +112,7 @@ function RowVerdicts({ rows, modelId, selected, pickable, onPick }: {
           {VERDICT[g.k]!.title.toLowerCase()} {g.rs.length}</span>)}
       </summary>
       <div className="chips" aria-label="verdict per batch row">
-        {rows.map((x) => pickable.has(x.row)
+        {order.map((x) => pickable.has(x.row)
           ? <button key={x.row} type="button" className={`chip ${VERDICT[x.verdict]?.cls ?? ""}${x.row === selected ? " active" : ""}`}
               title={`row ${x.row + 1}: ${x.act_status} · show this row's counterexample`} onClick={() => onPick(x.row)}>
               {label(x.row)} {x.act_status}</button>

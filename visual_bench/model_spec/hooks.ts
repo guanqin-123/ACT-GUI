@@ -29,16 +29,38 @@ export function useNearest(id: string | null, row: number, point: number[] | nul
     enabled: id !== null && body !== null });
 }
 
-// What each ACT input row of a batched model is: a test image (torch batch) or a VNN-LIB property on one network.
-export type BatchRows = { noun: "image" | "property"; labels: string[]; images: number[] | null };
+// What each ACT input row of a batched model is: a test image (torch batch), a VNN-LIB property on one network, or
+// one query of a VNN-LIB property (models built with every query as a row carry query_rows; batches add
+// query_counts, rows grouped by property in vnnlibs order).
+export type BatchRows = { noun: "image" | "property" | "query"; labels: string[]; images: number[] | null };
 
 export function batchRows(p: Record<string, unknown> | undefined): BatchRows | null {
   if (typeof p?.indices === "string") {
     const images = p.indices.split(",").map(Number);
     return { noun: "image", labels: images.map((x) => `#${x}`), images };
   }
-  if (typeof p?.vnnlibs === "string") return { noun: "property", labels: p.vnnlibs.split(",").map(fileStem), images: null };
+  if (typeof p?.vnnlibs === "string") {
+    const stems = p.vnnlibs.split(",").map(fileStem);
+    const counts = typeof p.query_counts === "string" ? p.query_counts.split(",").map(Number) : null;
+    if (!counts || counts.length !== stems.length || !counts.every((n) => Number.isInteger(n) && n >= 1)) {
+      return { noun: "property", labels: stems, images: null };
+    }
+    const labels = stems.flatMap((s, i) => counts[i] === 1 ? [s] : queryLabels(counts[i]!).map((q) => `${s} ${q}`));
+    return { noun: counts.some((n) => n > 1) ? "query" : "property", labels, images: null };
+  }
+  const rows = p?.query_rows;
+  if (typeof rows === "number" && Number.isInteger(rows) && rows > 1) return { noun: "query", labels: queryLabels(rows), images: null };
   return null;
+}
+
+function queryLabels(n: number): string[] {
+  return Array.from({ length: n }, (_, j) => `q${j + 1}`);
+}
+
+/** "3 images", "1 property", "38 queries": a row count in the batch's own noun. */
+export function rowCount(n: number, noun: BatchRows["noun"] | "row"): string {
+  const plural = noun === "property" ? "properties" : noun === "query" ? "queries" : `${noun}s`;
+  return `${n} ${n === 1 ? noun : plural}`;
 }
 
 export function useBatchRows(modelId: string | null): BatchRows | null {

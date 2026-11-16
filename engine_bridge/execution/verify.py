@@ -14,7 +14,7 @@ from typing import Any
 
 from engine_bridge.contracts import (DOMAINS, BabOptionSpec, BridgeError, Domain, DualOptions, LaneOutcome, Method,
                                      RunOutcome, Verdict)
-from engine_bridge.engine_session import act_imports
+from engine_bridge.engine_session import act_imports, capability_available
 from engine_bridge.model_spec.describe import load_net
 
 _STATUS_MAP: dict[str, Verdict] = {
@@ -190,6 +190,7 @@ def run_verification(model_path: Path, method: Method, time_budget_s: float, dom
     if not (0 < time_budget_s <= 3600):
         raise BridgeError("invalid_budget", "time_budget_s must be in (0, 3600]")
     net = load_net(model_path)
+    center_check = method == "interval" and domain != "dual" and capability_available("verify.center_check")
     with act_imports():
         if method == "interval":
             from act.back_end.verifier import verify_once
@@ -199,6 +200,12 @@ def run_verification(model_path: Path, method: Method, time_budget_s: float, dom
             kwargs: dict[str, Any] = (
                 {"timelimit": float(time_budget_s), "hybridz_tolerance": float(hybridz_tolerance)}
                 if domain == "hybridz" else dual_kwargs(dual or DualOptions()) if domain == "dual" else {})
+            if center_check:
+                # ACT checks each uncertified lane's box center concretely: a lane whose box is one point (or
+                # whose center violates the property) is FALSIFIED there. Dual validates its own witnesses.
+                from act.util.counterexample import concrete_forward
+
+                kwargs["model_fn"] = lambda x: concrete_forward(net, x)
             t = time.perf_counter()
             results = verify_once(net, **kwargs)
             elapsed = time.perf_counter() - t

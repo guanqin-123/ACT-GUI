@@ -3,7 +3,7 @@ import { fmt, indexRanges } from "../shared/wire";
 import type { ModelSummary } from "../generated/wire";
 import type { UseQueryResult } from "@tanstack/react-query";
 import { builtWithLabel } from "./RebuildNotice";
-import { batchRows } from "./hooks";
+import { batchRows, fileStem, rowCount } from "./hooks";
 
 export function ModelList({ models, selected, onSelect }: {
   models: UseQueryResult<ModelSummary[]>; selected: string | null; onSelect: (id: string) => void;
@@ -29,7 +29,8 @@ export function ModelList({ models, selected, onSelect }: {
                     {m.source && m.source !== "catalog" && <span className="chip">{m.source === "torch" ? "torch" : "vnn-lib"}</span>}
                     {m.source === "torch" && <TorchChips p={m.params ?? {}} />}
                     {m.source === "vnnlib" && typeof m.params?.batch === "number" && (
-                      <span className="chip" title={`properties ${batchRows(m.params)?.labels.join(", ")}`}>batch {m.params.batch}</span>)}
+                      <span className="chip" title={`properties ${String(m.params.vnnlibs).split(",").map(fileStem).join(", ")}`}>batch {m.params.batch}</span>)}
+                    {m.source === "vnnlib" && <QueriesChip p={m.params ?? {}} />}
                     <EngineChip m={m} />
                     {Object.entries(m.native).map(([method, r]) => (
                       <span key={method} className={`chip v-${r.status.toLowerCase()}`} title="recorded native ACT result (fixtures/catalog.json)">
@@ -79,6 +80,15 @@ function EngineChip({ m }: { m: ModelSummary }) {
     return <span className="chip warn" title={`${built}; not yet loaded on the active engine`}>ACT {m.built_with.commit?.slice(0, 8)}</span>;
   }
   return null;
+}
+
+// Models built with every query of a property as an INPUT row (query_rows): how many rows the verdict covers.
+function QueriesChip({ p }: { p: Record<string, unknown> }) {
+  const rows = typeof p.query_rows === "number" ? p.query_rows : 0;
+  if (rows <= (typeof p.batch === "number" ? p.batch : 1)) return null;
+  const labels = batchRows(p)?.labels ?? [];
+  return <span className="chip" title={`one input row per query: ${labels.slice(0, 12).join(", ")}${labels.length > 12 ? ", …" : ""}`}>
+    {rowCount(rows, "query")}</span>;
 }
 
 function TorchChips({ p }: { p: Record<string, unknown> }) {

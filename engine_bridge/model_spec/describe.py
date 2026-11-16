@@ -14,7 +14,7 @@ from engine_bridge.engine_session import act_imports
 # ACT's data (smart_turn_multimodal_2026: audio 80x800 plus video 3x32x112x112, packed by ACT into one row),
 # so every listed benchmark instance can be described.
 _MAX_SPEC_VALUES = 80 * 800 + 3 * 32 * 112 * 112
-_MAX_SPEC_ROWS = 64  # rows of a batched INPUT_SPEC (model_spec.sources.BATCH_LIMIT)
+_MAX_SPEC_ROWS = 4096  # rows of a batched INPUT_SPEC: one per query (model_spec.sources.ROW_LIMIT)
 
 
 def file_sha256(path: Path) -> str:
@@ -79,7 +79,19 @@ def _describe_assert(layer: Any) -> OutputSpec:
         for row, t in zip(matrix, thresholds):
             terms = " + ".join(f"{c:g}*y{j}" for j, c in enumerate(row) if c != 0) or "0"
             parts.append(f"{terms} <= {t:g}")
-        text = f"{kind}: property holds iff for every row, " + "; ".join(parts) + \
+        # ACT encodes one block of constraint rows per INPUT row (thresholds [inputs, rows each]) and pads
+        # shorter blocks by repeating one of their rows.
+        inputs = int(thr.shape[0]) if isinstance(thr, torch.Tensor) and thr.dim() == 2 else 1
+        each = len(parts) // inputs if len(parts) % inputs == 0 else len(parts)
+        blocks = ["; ".join(dict.fromkeys(parts[k:k + each])) for k in range(0, len(parts), each)]
+        if len(blocks) == 1:
+            body = blocks[0]
+        elif len(set(blocks)) == 1:
+            body = f"{blocks[0]} (the same for each of the {len(blocks)} input rows)"
+        else:
+            body = " | ".join(f"input row {k + 1}: {b}" for k, b in enumerate(blocks[:3])) + \
+                (f" | ... ({len(blocks)} input rows)" if len(blocks) > 3 else "")
+        text = f"{kind}: property holds iff for every row, {body}" + \
             "  (ACT certifies when the upper bound of C@y is below the threshold)"
     else:
         text = f"{kind} with {rows} constraint row(s)"

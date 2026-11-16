@@ -63,6 +63,13 @@ def vnncomp_sat(x: list[float], y: list[float], x_shape: list[int]) -> str:
     return "\n".join(["sat", header("X", x_shape), *map(repr, x), header("Y", [1, len(y)]), *map(repr, y)]) + "\n"
 
 
+def declared_row(params: dict[str, Any], x: list[float]) -> list[float] | None:
+    """The VNN-LIB declared input of a model row whose rows carry more (params declared_inputs): ACT's
+    integer-cast input cases put the declared input first, then fixed case values. None for other models."""
+    declared = params.get("declared_inputs")
+    return None if declared is None else x[:int(declared)]
+
+
 class LiveObserver(Protocol):
     def observe(self, run_id: str, msg: dict[str, Any]) -> tuple[str, dict[str, Any]] | None: ...
 
@@ -490,6 +497,9 @@ class RunService:
             reason = found[3] if found else None
             raise AppError(422, "output_unavailable", "The network output at this counterexample could not be computed, "
                            f"so it has no VNN-COMP witness: {reason or 'not recorded'}")
+        x = declared_row(self.models.entry(run.model_id).get("params", {}), ce["input"])
+        if x is not None:
+            return vnncomp_sat(x, ce["output"], [1, len(x)])
         specs = self.models.describe(run.model_id).input_specs
         shape = [1, *specs[0].shape[1:]] if specs and specs[0].shape else [1, len(ce["input"])]
         return vnncomp_sat(ce["input"], ce["output"], shape if math.prod(shape) == len(ce["input"]) else [1, len(ce["input"])])

@@ -122,13 +122,103 @@ def test_vnnlib_batch_merges_properties_of_one_network_through_act_synthesis(tmp
     assert err.value.code == "invalid_instance"
     if not (sources.vnnlib_root() / "acasxu_2023").is_dir():
         pytest.skip("ACT checkout has no acasxu_2023 benchmark")
-    # Same network, UNSAFE_LINEAR properties with 1 and 4 rows: no ACT synthesis merges them.
+    # Same network, UNSAFE_LINEAR properties with 1 and 4 rows: the build follows ACT's own synthesis, which
+    # stacks them only on an ACT that pads constraint rows.
     props = [VnnlibInstance("acasxu_2023", "onnx/ACASXU_run2a_1_1_batch_2000.onnx", f"vnnlib/prop_{k}.vnnlib")
              for k in (1, 2)]
+    queries, models = native_synthesis(props)
+    if models == 1:
+        assert sources.build_vnnlib_net(props, tmp_path / "u.json").input_rows == sum(queries)
+        return
     with pytest.raises(BridgeError) as err:
         sources.build_vnnlib_net(props, tmp_path / "u.json")
     assert err.value.code == "incompatible_batch"
     assert not (tmp_path / "u.json").exists()
+
+def native_synthesis(insts) -> tuple[list[int], int]:
+    """Query count per property and number of models of ACT's own synthesis of every query, on one model object
+    (as the bridge stacks them)."""
+    from engine_bridge.model_spec import sources
+
+    with act_imports():
+        from act.front_end.model_synthesis import synthesize_models_and_seeds_from_specs
+        from act.front_end.vnnlib_loader.create_specs import create_specs_from_paths
+
+        results = []
+        for i in insts:
+            bench = sources.vnnlib_root() / i.benchmark
+            paths = [bench / p for p in i.onnx.split(",")]
+            results.append(create_specs_from_paths(paths if len(paths) > 1 else paths[0], bench / i.vnnlib,
+                                                   category=i.benchmark))
+        model = results[0][2]
+        models, _ = synthesize_models_and_seeds_from_specs(
+            [(cat, name, model, labeled, pairs) for cat, name, _, labeled, pairs in results], cd_group="shape")
+    return [len(r[4]) for r in results], len(models)
+
+def vnnlib_instance(benchmark: str, vnnlib: str, onnx: str | None = None):
+    """A listed VNN-COMP 2026 instance, on an ACT that supports those benchmarks (PR #139 added multi-network
+    properties together with the operators and nonlinear properties cgan2026, ml4acopf_2024 and ACC need)."""
+    from engine_bridge.engine_session.parity import capability_available
+    from engine_bridge.model_spec import sources
+
+    if not capability_available("source.vnnlib.multi_network"):
+        pytest.skip("the active ACT predates VNN-COMP 2026 benchmark support")
+    inst = next((i for i in sources.vnnlib_instances() if i.benchmark == benchmark and i.vnnlib == vnnlib
+                 and (onnx is None or i.onnx == onnx)), None)
+    if inst is None:
+        pytest.skip(f"ACT checkout has no {benchmark} instance {vnnlib}")
+    return inst
+
+@pytest.mark.parametrize("benchmark,vnnlib,onnx", [
+    ("cgan2026", "vnnlib/cGAN_imgSz32_nCh_1_prop_0_input_eps_0.100_output_eps_0.108.vnnlib", None),
+    ("isomorphic_acasxu_2026", "vnnlib/instance_0.vnnlib", None),
+    ("ml4acopf_2024", "vnnlib/300_ieee_prop3.vnnlib", "onnx/300_ieee_ml4acopf.onnx"),
+])
+def test_every_query_of_a_vnnlib_property_is_an_input_row(tmp_path, benchmark, vnnlib, onnx):
+    from engine_bridge.model_spec import sources
+
+    require_sources()
+    inst = vnnlib_instance(benchmark, vnnlib, onnx)
+    (queries,), models = native_synthesis([inst])
+    assert queries > 1 and models == 1
+    built = sources.build_vnnlib_net(inst, tmp_path / "q.json")
+    d = describe_model(tmp_path / "q.json")
+    assert (built.input_rows, built.params["query_rows"], d.input_specs[0].shape[0]) == (queries, queries, queries)
+    assert f"({queries} queries)" in built.description
+
+def test_queries_with_different_constraint_rows_follow_acts_synthesis(tmp_path):
+    from engine_bridge.model_spec import sources
+
+    require_sources()
+    # Nonlinear ACC: 38 queries whose UNSAFE_LINEAR constraints have 2, 4, 5 or 7 rows.
+    inst = vnnlib_instance("adaptive_cruise_control_non_linear_2026", "vnnlib/instance_1.vnnlib")
+    (queries,), models = native_synthesis([inst])
+    if models == 1:
+        assert sources.build_vnnlib_net(inst, tmp_path / "a.json").input_rows == queries
+        return
+    with pytest.raises(BridgeError) as err:
+        sources.build_vnnlib_net(inst, tmp_path / "a.json")
+    assert err.value.code == "unsupported_spec" and f"{queries} queries" in err.value.message
+    assert not (tmp_path / "a.json").exists()
+
+def test_batch_rows_are_grouped_by_property(tmp_path):
+    from engine_bridge.contracts import VnnlibInstance
+    from engine_bridge.model_spec import sources
+
+    require_sources()
+    props = [vnnlib_instance("ml4acopf_2024", f"vnnlib/14_ieee_prop{k}.vnnlib", "onnx/14_ieee_ml4acopf.onnx")
+             for k in (9, 2)]
+    queries, models = native_synthesis(props)
+    assert queries == [2, 1] and models == 1
+    built = sources.build_vnnlib_net(props, tmp_path / "b.json")
+    singles = []
+    for k, p in enumerate(props):
+        sources.build_vnnlib_net(p, tmp_path / f"s{k}.json")
+        singles += describe_model(tmp_path / f"s{k}.json").input_specs[0].lb
+    d = describe_model(tmp_path / "b.json")
+    assert (built.input_rows, built.params["query_counts"], built.params["query_rows"]) == (3, "2,1", 3)
+    # Rows hold property 9's two queries, then property 2's query.
+    assert d.input_specs[0].lb == pytest.approx(singles)
 
 def test_multi_network_property_builds_one_net_over_the_combined_input(tmp_path):
     from engine_bridge.engine_session.parity import capability_available

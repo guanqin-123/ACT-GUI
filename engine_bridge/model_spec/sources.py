@@ -10,6 +10,7 @@ import ast
 import contextlib
 import csv
 import io
+import math
 import threading
 from collections.abc import Sequence
 from pathlib import Path
@@ -135,17 +136,22 @@ def _wrap_to_net(model: Any, center: Any, label: Any, input_spec: Any, output_sp
 
 
 BATCH_LIMIT = 64
+# INPUT rows of one VNN-LIB build: one per query of every property (ml4acopf_2024 properties have up to 600
+# queries; cctsdb_yolo_2023's integer patch positions give 190 cases).
+ROW_LIMIT = 4096
 
 
 def build_vnnlib_net(inst: VnnlibInstance | Sequence[VnnlibInstance], out_path: Path) -> BuiltNet:
-    """ONNX + VNN-LIB through ACT's create_specs_from_paths; the first query of each property becomes its spec.
+    """ONNX + VNN-LIB through ACT's create_specs_from_paths; every query of a property is one INPUT row.
 
-    A sequence of properties on one network (same benchmark and ONNX file) builds one net with a row per
-    property, merged by ACT's own model synthesis (synthesize_models_and_seeds_from_specs), which ACTFuzzer
-    fuzzes as one batch. ACT merges properties with the same input/output kind and output constraint
-    (cd_group="shape": UNSAFE_LINEAR properties that differ only in their thresholds d, as ACT's fuzzing
-    pipeline groups them); others, or per-property thresholds on an ACT engine whose encode_linear
-    cannot take them, raise incompatible_batch.
+    A VNN-LIB property is violated when any of its queries is satisfiable, so the net holds all of them and
+    its verdict is the conjunction over rows (execution.verify). ACT's create_specs_from_paths returns one
+    query per disjunct (and, on ACT with integer-cast input cases, one per case); ACT's own model synthesis
+    (synthesize_models_and_seeds_from_specs, cd_group="shape") stacks them into one model. A sequence of
+    properties on one network (same benchmark and ONNX file) adds their queries as further rows, property by
+    property. When ACT keeps the rows in several models (different input/output kinds, a fixed-shape input,
+    or an ACT that cannot stack different constraint shapes), the build fails instead of keeping a subset.
+    A single property with a single query keeps ACT's plain wrapping (same net as before).
     """
     insts = [inst] if isinstance(inst, VnnlibInstance) else list(inst)
     if not 1 <= len(insts) <= BATCH_LIMIT or len({i.vnnlib for i in insts}) != len(insts):
@@ -178,51 +184,78 @@ def build_vnnlib_net(inst: VnnlibInstance | Sequence[VnnlibInstance], out_path: 
             except Exception as exc:
                 raise BridgeError("model_load_failed", f"ACT could not load {i.onnx} / {i.vnnlib}: {exc}") from exc
             lt = labeled[0]
-            input_spec, output_spec = pairs[0]
-            for spec in (input_spec, output_spec):
+            # Queries of one property may share spec objects: move each once.
+            for spec in {id(s): s for pair in pairs for s in pair}.values():
                 for attr, value in vars(spec).items():
                     if hasattr(value, "to") and hasattr(value, "dtype"):
                         integral = not value.dtype.is_floating_point
                         setattr(spec, attr, value.to(device=device) if integral else value.to(device=device, dtype=dtype))
             parsed.append((model, LabeledInputTensor(lt.tensor.to(device=device, dtype=dtype),
                                                      lt.label.to(device=device) if lt.label is not None else None),
-                           input_spec, output_spec, len(pairs)))
+                           list(pairs)))
+        queries = [len(p[2]) for p in parsed]
+        if sum(queries) > ROW_LIMIT:
+            raise BridgeError("invalid_instance", f"these properties have {sum(queries)} queries in total; one model "
+                                                  f"holds at most {ROW_LIMIT} (one INPUT row per query)")
+        declared = _declared_inputs(bench, first, int(parsed[0][1].tensor.numel()))
         model = parsed[0][0].eval().to(device=device, dtype=dtype)
-        if len(parsed) == 1:
-            _, lt, input_spec, output_spec, _ = parsed[0]
+        if queries == [1]:
+            _, lt, ((input_spec, output_spec),) = parsed[0]
             net = _wrap_to_net(model, lt.tensor, lt.label, input_spec, output_spec, dataset)
         else:
-            net = _merge_vnnlib_batch(model, parsed, insts, dataset, device, dtype)
+            net = _synthesize_vnnlib_net(model, parsed, insts, dataset, device, dtype)
         save_net_to_file(net, str(out_path))
-    queries = [p[4] for p in parsed]
+    rows = sum(queries)
     params: dict[str, str | int | float] = {"benchmark": first.benchmark, "onnx": first.onnx, "vnnlib": first.vnnlib,
-                                            "queries": queries[0], "dataset": dataset}
+                                            "queries": queries[0], "query_rows": rows, "dataset": dataset}
+    if declared is not None:
+        params["declared_inputs"] = declared
     if len(insts) == 1:
         return BuiltNet(f"VNN-LIB {first.benchmark}: {_onnx_names(first.onnx)} + {Path(first.vnnlib).name}"
-                        + (f" (query 1 of {queries[0]})" if queries[0] > 1 else ""), params)
-    params |= {"batch": len(insts), "vnnlibs": ",".join(i.vnnlib for i in insts)}
-    multi = sum(q > 1 for q in queries)
+                        + (f" ({rows} queries)" if rows > 1 else ""), params, input_rows=rows)
+    params |= {"batch": len(insts), "vnnlibs": ",".join(i.vnnlib for i in insts),
+               "query_counts": ",".join(str(q) for q in queries)}
     return BuiltNet(f"VNN-LIB {first.benchmark}: {_onnx_names(first.onnx)}, batch of {len(insts)} properties"
-                    + (f" (query 1 of each; {multi} have more)" if multi else ""), params, input_rows=len(insts))
+                    + (f" ({rows} queries)" if rows > len(insts) else ""), params, input_rows=rows)
 
 
-def _merge_vnnlib_batch(model: Any, parsed: list[tuple[Any, ...]], insts: Sequence[VnnlibInstance], dataset: str,
-                        device: Any, dtype: Any) -> Any:
-    """One batched ACT net from per-property specs on one model, grouped and merged by ACT's model synthesis."""
+def _declared_inputs(bench: Path, inst: VnnlibInstance, row_size: int) -> int | None:
+    """Values of the network input the VNN-LIB property declares, when an INPUT row carries more.
+
+    ACT's integer-cast input cases append fixed case values to each row after the declared input (see
+    ACT's IntegerInputCases); a counterexample's declared prefix is an input of the original network.
+    Call inside act_imports().
+    """
+    if "," in inst.onnx:
+        return None
+    from act.front_end.vnnlib_loader.onnx_converter import get_onnx_input_shape
+
+    declared = int(math.prod(max(int(d), 1) for d in get_onnx_input_shape(bench / inst.onnx)))
+    return declared if declared < row_size else None
+
+
+def _synthesize_vnnlib_net(model: Any, parsed: list[tuple[Any, ...]], insts: Sequence[VnnlibInstance], dataset: str,
+                           device: Any, dtype: Any) -> Any:
+    """One ACT net with a row per query of every property on one model, stacked by ACT's model synthesis."""
     from act.front_end.model_synthesis import synthesize_models_and_seeds_from_specs
     from act.pipeline.verification.torch2act import TorchToACT
 
     # One model object for every property: ACT groups specs by model identity.
-    spec_results = [(dataset, Path(i.vnnlib).stem, model, [lt], [(in_spec, out_spec)])
-                    for i, (_, lt, in_spec, out_spec, _) in zip(insts, parsed, strict=True)]
+    spec_results = [(dataset, Path(i.vnnlib).stem, model, [lt], pairs)
+                    for i, (_, lt, pairs) in zip(insts, parsed, strict=True)]
     with contextlib.redirect_stdout(io.StringIO()):  # synthesis prints a progress summary
         models, seeds = synthesize_models_and_seeds_from_specs(spec_results, cd_group="shape")
     if len(models) != 1:
+        if len(insts) == 1:
+            raise BridgeError("unsupported_spec",
+                              f"{insts[0].vnnlib}: ACT keeps the {len(parsed[0][2])} queries of this property in "
+                              f"{len(models)} separate models (different input or output kinds, constraint shapes, or "
+                              f"a fixed-shape input); the workbench verifies one model holding every query")
         owner = {id(p[1]): Path(i.vnnlib).stem for i, p in zip(insts, parsed, strict=True)}
-        groups = "; ".join(", ".join(owner[id(lt)] for lt in group) for group in seeds.values())
+        groups = "; ".join(", ".join(dict.fromkeys(owner[id(lt)] for lt in group)) for group in seeds.values())
         raise BridgeError("incompatible_batch",
-                          f"ACT batches only properties with the same input kind, output kind and output constraint; "
-                          f"these {len(insts)} properties form {len(models)} groups: {groups}")
+                          f"ACT batches only queries with the same input kind, output kind and output constraint "
+                          f"shape; these {len(insts)} properties form {len(models)} groups: {groups}")
     vm = next(iter(models.values())).to(device=device, dtype=dtype)
     try:
         return TorchToACT(vm, sample_input=vm.input_layer.input_tensor).run()

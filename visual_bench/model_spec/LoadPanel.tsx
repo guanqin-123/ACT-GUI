@@ -249,8 +249,8 @@ function VnnlibForm({ s, current, onLoaded }: { s: SourcesOut; current: ModelSum
         {load.busy ? "Loading through ACT…" : batched ? `Load batch of ${ks.length}` : "Load instance"}
       </button>
       {load.error && <div className="error">{load.error}</div>}
-      <div className="note">ACT converts the ONNX model and parses the VNN-LIB file; its first query becomes the input box and property.
-        {batched ? " A batch is one net on this network with a row per property, merged by ACT's model synthesis: ACTFuzzer fuzzes the rows together. ACT merges only properties of the same kind and constraint shape; BaB needs a single property." : ""}</div>
+      <div className="note">ACT converts the ONNX model and parses the VNN-LIB file; each query of a property becomes one input row (box and constraints), and BaB needs a single row.
+        {batched ? " A batch is one net on this network with the rows of every property, merged by ACT's model synthesis: ACTFuzzer fuzzes the rows together. ACT merges only properties of the same kind and constraint shape." : ""}</div>
     </div>
   );
 }
