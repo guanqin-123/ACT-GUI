@@ -1,7 +1,7 @@
-// Query: POST /api/presence every 20 s; the server counts browsers seen inside its window.
+// Queries: POST /api/presence every 20 s (the server counts browsers seen inside its window) and the visit history.
 import { useQuery } from "@tanstack/react-query";
 import { keys } from "../shared/queryClient";
-import { heartbeat } from "./api";
+import { heartbeat, visitHistory } from "./api";
 
 const ID_KEY = "act-gui.presence-id";
 
@@ -24,3 +24,7 @@ export const usePresence = () =>
     refetchInterval: 20_000,
     refetchIntervalInBackground: true,
   });
+
+// Visits per country; refreshed at the heartbeat pace only while a view (the hover card) is mounted.
+export const useVisitHistory = () =>
+  useQuery({ queryKey: keys.presenceHistory(), queryFn: visitHistory, staleTime: 20_000, refetchInterval: 20_000 });

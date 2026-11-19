@@ -38,6 +38,11 @@ def engines_root(records: Path) -> Path:
     return Path(os.environ.get("ACT_GUI_ENGINES", records.parent / "engines"))
 
 
+def presence_history(records: Path) -> Path:
+    """Per-country visit totals of the online-visitor bar."""
+    return records.parent / "presence.json"
+
+
 DEFAULT_ACT_REMOTES = "SVF-tools=https://github.com/SVF-tools/ACT.git,guanqin-123=https://github.com/guanqin-123/ACT.git"
 
 

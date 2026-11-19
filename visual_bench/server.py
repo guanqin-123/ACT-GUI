@@ -34,7 +34,8 @@ INSTANCE = uuid.uuid4().hex[:12]
 
 
 def create_app(records_root: Path | None = None, secrets_root: Path | None = None) -> FastAPI:
-    wb = Workbench(records_root or config.records_root(), secrets_root=secrets_root)
+    records_root = records_root or config.records_root()
+    wb = Workbench(records_root, secrets_root=secrets_root)
     app = FastAPI(title="ACT-GUI workbench", version=VERSION)
     app.state.workbench = wb
 
@@ -61,7 +62,7 @@ def create_app(records_root: Path | None = None, secrets_root: Path | None = Non
     app.include_router(bab_routes.router(wb.bab))
     app.include_router(records_routes.router(wb.records))
     app.include_router(assistant_routes.router(wb))
-    app.include_router(workspace_routes.router(PresenceService()))
+    app.include_router(workspace_routes.router(PresenceService(config.presence_history(records_root))))
 
     if config.WEB_DIST.is_dir():  # production build served from the same origin (npm run build)
         from fastapi.staticfiles import StaticFiles

@@ -397,9 +397,17 @@ export type Point = [number, ...(number)[]]
 export type Row3 = number
 export type ClientId = string
 /**
- * Online browsers per country, largest first
+ * Visits per country, largest first; a browser starts a visit when its heartbeat arrives while it is not counted online
  */
 export type Countries = CountryCount[]
+/**
+ * ISO 8601 UTC time of the first recorded visit; null before any
+ */
+export type Since = (string | null)
+/**
+ * Online browsers per country, largest first
+ */
+export type Countries1 = CountryCount[]
 /**
  * Browsers with a heartbeat inside the window
  */
@@ -612,6 +620,7 @@ NearestRequest?: NearestRequest
 OutputSpecOut?: OutputSpecOut
 ParamOut?: ParamOut
 PresenceHeartbeat?: PresenceHeartbeat
+PresenceHistoryOut?: PresenceHistoryOut
 PresenceOut?: PresenceOut
 PropagationIndexOut?: PropagationIndexOut
 PropagationKeyOut?: PropagationKeyOut
@@ -1538,10 +1547,18 @@ client_id: ClientId
 }
 /**
  * This interface was referenced by `ActGuiWire`'s JSON-Schema
+ * via the `definition` "PresenceHistoryOut".
+ */
+export interface PresenceHistoryOut {
+countries: Countries
+since: Since
+}
+/**
+ * This interface was referenced by `ActGuiWire`'s JSON-Schema
  * via the `definition` "PresenceOut".
  */
 export interface PresenceOut {
-countries: Countries
+countries: Countries1
 online: Online
 window_s: WindowS
 }

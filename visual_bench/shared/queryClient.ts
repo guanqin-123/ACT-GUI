@@ -38,4 +38,5 @@ export const keys = {
   engineBranches: (remote: string | null) => ["engine", "branches", remote] as const,
   providers: () => ["assistant", "providers"] as const,
   presence: () => ["presence"] as const,
+  presenceHistory: () => ["presence", "history"] as const,
 };

@@ -10,7 +10,7 @@ Choose the owner of the behavior, then follow the linked module guide for files 
 
 | Goal / module | Current responsibility and entry guide | Neighbor handoff |
 | --- | --- | --- |
-| **workspace** | [Selection, modes, layout, theme, tour](workspace/README.md#change-guide) | Passes selection to views; its only HTTP route is the online-visitor heartbeat. |
+| **workspace** | [Selection, modes, layout, theme, tour](workspace/README.md#change-guide) | Passes selection to views; its only HTTP routes are the online-visitor heartbeat and visit history. |
 | **model_spec** | [Load models and inspect graph/spec/input images](model_spec/README.md#change-guide) | Provides model ID, verified path, supported methods to verification; source adaptation goes through bridge model_spec. |
 | **verification** | [Start/stop runs, supervise workers, expose lifecycle/SSE](verification/README.md#change-guide) | Accepts RunRequest; returns run_id/RunOut; persists results through records. |
 | **fuzzing** | [Options, live images, saved counterexamples and export](fuzzing/README.md#change-guide) | Uses verification lifecycle; provides runner.py and FuzzLive; serves FuzzingOut. |

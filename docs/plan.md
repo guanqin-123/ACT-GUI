@@ -29,7 +29,7 @@ BASE-02 does not wait for ACT; only BASE-03 needs the pinned engine. Development
 
 | Module | Owner | Task IDs | Detailed plan |
 | --- | --- | --- | --- |
-| visual_bench/workspace | C | WS-01, WS-02, WS-03, WS-04 | [README](../visual_bench/workspace/README.md) |
+| visual_bench/workspace | C | WS-01, WS-02, WS-03, WS-04, WS-05 | [README](../visual_bench/workspace/README.md) |
 | visual_bench/model_spec | C | MSV-01, MSV-02, MSV-03, MSV-04, MSV-05, MSV-06, MSV-07, MSV-08 (input provenance views) | [README](../visual_bench/model_spec/README.md) |
 | visual_bench/verification | B | VER-01, VER-02, VER-03, VER-04, VER-07 (stop, verdict banner), VER-11 (counterexample save/export), VER-12 (run diagnostics, reproduction snapshot), VER-16 (fuzz worker control channel), VER-17 (BaB tree recording), VER-19 (counterexample against input provenance) | [README](../visual_bench/verification/README.md) |
 | visual_bench/fuzzing | B (service), C (views) | VER-06, VER-07 (saved counterexamples), VER-15 (option schema and live controls) | [README](../visual_bench/fuzzing/README.md) |
@@ -124,6 +124,7 @@ Recorded 2026-11-03 against ACT `deff2fb0c031` (branch CLIMB, tracked tree clean
 | REC-02/03 | Partial | Atomic writes, torn-tail recovery, interrupted-run marking, event replay. No commit batches (needs EVT-02). REC-04 export only, no import. |
 | WS-01/02 | First version | Selection reducer + latest-request guard (vitest). WS-03 not started. |
 | WS-04 | Implemented | Online-visitor bar: `POST /api/presence` heartbeat, in-memory 90 s window (pytest `visual_bench/workspace`). |
+| WS-05 | Implemented | Visit history on the same map: per-country visit totals persisted in `presence.json` next to the records root, `GET /api/presence/history` (pytest `visual_bench/workspace`). |
 | MSV-01 | First version | Model list, SVG DAG, spec and layer detail on real data; image-shaped specs render as images with sampled perturbations. MSV-02 renderer evaluation and MSV-03 drafts not started. |
 | ANA-01 | First version | Stepper over recorded layer states, before/after bars, value selection. ANA-02: interval-box 2-D projection only. ANA-03 not started. |
 | BAB-01, BAB-02, BAB-04 | First version | 2026-11-12: `GET /api/runs/{id}/bab` and `/bab/nodes/{node_id}` project the recorded waves (`visual_bench/bab/tree.py`); the BaB tab shows the tree growing per committed wave, wave replay, subtree focus, wave timeline and node detail (splits, ACT bound, ReLU stability per layer). Older ACT keeps coverage and the final summary. BAB-03 (node actions) not started: ACT exposes no BaB controls. |

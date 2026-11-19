@@ -33,13 +33,13 @@ from visual_bench.verification.schemas import BabOptionsOut, RunEvent, RunList, 
 from visual_bench.analysis.schemas import LayerStatesOut, PropagationIndexOut, PropagationLayerOut
 from visual_bench.bab.schemas import BabNodeDetailOut, BabTreeOut, CoverageOut
 from visual_bench.assistant.schemas import ExplainRequest, ExplainResponse, ProviderList
-from visual_bench.workspace.schemas import PresenceHeartbeat, PresenceOut
+from visual_bench.workspace.schemas import PresenceHeartbeat, PresenceHistoryOut, PresenceOut
 
 WIRE_MODELS: tuple[type[BaseModel], ...] = (
     ErrorResponse, HealthOut, EngineInfoOut, ModelSummary, ModelDescriptionOut, RunRequest, RunOut, RunList, VerifyDefaults,
     LayerStatesOut, RunEvent, CoverageOut, FuzzingOut, ExplainRequest, ExplainResponse, ProviderList, SolverLicenseUpload,
     SolverStatusOut, SourcesOut, SampleOut, LoadModelBody, SaveCounterexampleRequest, SavedCounterexampleOut,
-    EngineSourcesOut, EngineBranchesOut, EngineSwitchRequest, PresenceHeartbeat, PresenceOut,
+    EngineSourcesOut, EngineBranchesOut, EngineSwitchRequest, PresenceHeartbeat, PresenceOut, PresenceHistoryOut,
     PropagationIndexOut, PropagationLayerOut,
     FuzzOptionsSchemaOut, FuzzControlRequest, FuzzControlOut, BabTreeOut, BabNodeDetailOut, BabOptionsOut,
     ProvenanceOut, NearestRequest, NearestOut,
